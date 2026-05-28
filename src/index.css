@@ -1,5 +1,14 @@
 @import 'tailwindcss';
 
+@layer base {
+  /* Tailwind v4's preflight no longer sets cursor: pointer on buttons.
+     Restore the v3 default for any interactive (non-disabled) button.
+     Placed in @layer base so explicit `cursor-*` utilities still win. */
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
 html,
 body,
 #root {

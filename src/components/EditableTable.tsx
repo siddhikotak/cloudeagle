@@ -89,6 +89,7 @@ export function EditableTable<TRow extends { id: RowId }>({
     commitCellEdit,
     undo,
     redo,
+    commitChanges,
   } = undoRedo;
   useBeforeUnloadWarning(hasUnsavedChanges);
   const visibleRows = useMemo(
@@ -193,6 +194,14 @@ export function EditableTable<TRow extends { id: RowId }>({
             className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
           >
             Redo
+          </button>
+          <button
+            type="button"
+            onClick={commitChanges}
+            disabled={!hasUnsavedChanges}
+            className="rounded-md border border-blue-600 bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:border-blue-300 disabled:bg-blue-300"
+          >
+            Save changes
           </button>
         </div>
       </div>

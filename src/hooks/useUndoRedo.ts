@@ -22,7 +22,8 @@ type UndoRedoAction<TRow extends { id: RowId }> =
   | { type: 'commit'; edit: CellEdit<TRow>; historyLimit: number }
   | { type: 'undo' }
   | { type: 'redo' }
-  | { type: 'clearHistory' };
+  | { type: 'clearHistory' }
+  | { type: 'commitChanges' };
 
 type UseUndoRedoOptions<TRow extends { id: RowId }> = {
   rows: ReadonlyArray<TRow>;
@@ -45,6 +46,7 @@ export type UseUndoRedoResult<TRow extends { id: RowId }> = {
   undo: () => void;
   redo: () => void;
   clearHistory: () => void;
+  commitChanges: () => void;
 };
 
 const DEFAULT_HISTORY_LIMIT = 100;
@@ -237,6 +239,20 @@ function reducer<TRow extends { id: RowId }>(
         past: [],
         future: [],
       };
+
+    case 'commitChanges':
+      // "Save" semantics for a backend-less demo: accept the current rows
+      // as the new baseline. Replaces originals with current state, drops
+      // history, and clears the changedCellsByRow set — so editedRowIds
+      // (which is derived from changedCellsByRow) becomes empty and the
+      // amber "unsaved" row tints disappear.
+      return {
+        rows: state.rows,
+        originalRowsById: createOriginalRowsById(state.rows),
+        past: [],
+        future: [],
+        changedCellsByRow: new Map(),
+      };
   }
 }
 
@@ -285,6 +301,10 @@ export function useUndoRedo<TRow extends { id: RowId }>({
     dispatch({ type: 'clearHistory' });
   }, []);
 
+  const commitChanges = useCallback(() => {
+    dispatch({ type: 'commitChanges' });
+  }, []);
+
   const editedRowIds = useMemo(
     () => new Set(state.changedCellsByRow.keys()),
     [state.changedCellsByRow],
@@ -304,5 +324,6 @@ export function useUndoRedo<TRow extends { id: RowId }>({
     undo,
     redo,
     clearHistory,
+    commitChanges,
   };
 }

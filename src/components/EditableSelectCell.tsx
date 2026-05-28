@@ -1,5 +1,12 @@
-import { useRef, useState, type KeyboardEvent, type FocusEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import type { EditOption, ValidationResult } from '@/types/table';
+
+type Position = {
+  top: number;
+  left: number;
+  width: number;
+};
 
 type EditableSelectCellProps<TValue extends string | number> = {
   value: TValue;
@@ -21,8 +28,16 @@ export function EditableSelectCell<TValue extends string | number>({
   validate,
 }: EditableSelectCellProps<TValue>) {
   const [error, setError] = useState<string | null>(null);
-  const selectRef = useRef<HTMLSelectElement>(null);
-  const option = options.find((item) => item.value === value);
+  const [activeIndex, setActiveIndex] = useState<number>(() =>
+    Math.max(
+      options.findIndex((o) => o.value === value),
+      0,
+    ),
+  );
+  const [menuPosition, setMenuPosition] = useState<Position | null>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const selectedLabel = options.find((item) => item.value === value)?.label;
 
   const commit = (next: TValue): boolean => {
     const result = validate?.(next);
@@ -30,28 +45,115 @@ export function EditableSelectCell<TValue extends string | number>({
       setError(result.message);
       return false;
     }
-
     onSave(next);
     return true;
   };
 
-  const currentSelectValue = (): TValue =>
-    (selectRef.current?.value ?? String(value)) as TValue;
-
-  const handleBlur = (event: FocusEvent<HTMLSelectElement>) => {
-    const next = event.currentTarget.value as TValue;
-    const didSave = commit(next);
-    if (!didSave) {
-      window.requestAnimationFrame(() => {
-        selectRef.current?.focus();
+  // Measure the trigger and position the portaled list with position: fixed.
+  // Re-measure on window resize; close on any scroll so the menu never sits
+  // at a stale coordinate above its anchor. Scroll listener uses the
+  // capture phase because scroll events don't bubble — a bubble-phase
+  // listener on window would miss the table's inner scroll container.
+  useEffect(() => {
+    if (!isEditing) {
+      // Clear stale coords so a future re-open of this same cell doesn't
+      // briefly render the portal at the previous trigger's position
+      // before the measure pass below runs again.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMenuPosition(null);
+      return;
+    }
+    const measure = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      setMenuPosition({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
       });
+    };
+    measure();
+    const handleScroll = () => onCancel();
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [isEditing, onCancel]);
+
+  // Outside-click detection. The portaled <ul> is NOT a descendant of the
+  // cell's DOM subtree, so we explicitly include listRef alongside
+  // triggerRef — otherwise clicking an option would register as "outside"
+  // and cancel before the option's onClick fires.
+  useEffect(() => {
+    if (!isEditing) return;
+    const handleMouseDown = (event: globalThis.MouseEvent) => {
+      const target = event.target as Node;
+      const insideTrigger = triggerRef.current?.contains(target) ?? false;
+      const insideList = listRef.current?.contains(target) ?? false;
+      if (!insideTrigger && !insideList) {
+        onCancel();
+      }
+    };
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => document.removeEventListener('mousedown', handleMouseDown);
+  }, [isEditing, onCancel]);
+
+  // Focus the list so keyboard navigation works without a tab.
+  useEffect(() => {
+    if (!isEditing) return;
+    listRef.current?.focus();
+  }, [isEditing]);
+
+  // Keep the active option scrolled into view as the user arrows.
+  useEffect(() => {
+    if (!isEditing) return;
+    const list = listRef.current;
+    if (!list) return;
+    const item = list.children[activeIndex] as HTMLElement | undefined;
+    item?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex, isEditing]);
+
+  const handleTriggerKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!onActivate) return;
+    if (
+      event.key === 'Enter' ||
+      event.key === ' ' ||
+      event.key === 'ArrowDown'
+    ) {
+      event.preventDefault();
+      onActivate();
     }
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLSelectElement>) => {
+  const handleListKeyDown = (event: KeyboardEvent<HTMLUListElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveIndex((prev) => Math.min(prev + 1, options.length - 1));
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveIndex((prev) => Math.max(prev - 1, 0));
+      return;
+    }
+    if (event.key === 'Home') {
+      event.preventDefault();
+      setActiveIndex(0);
+      return;
+    }
+    if (event.key === 'End') {
+      event.preventDefault();
+      setActiveIndex(options.length - 1);
+      return;
+    }
     if (event.key === 'Enter') {
       event.preventDefault();
-      commit(currentSelectValue());
+      const option = options[activeIndex];
+      if (option) commit(option.value);
+      return;
     }
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -61,43 +163,91 @@ export function EditableSelectCell<TValue extends string | number>({
 
   if (!isEditing) {
     return (
-      <button
-        type="button"
+      <div
         onClick={onActivate}
-        className="w-full rounded border border-transparent bg-transparent px-2 py-1 text-left text-sm text-slate-700 transition hover:border-slate-200 hover:bg-white focus:border-blue-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+        onKeyDown={handleTriggerKeyDown}
+        tabIndex={onActivate ? 0 : undefined}
+        role={onActivate ? 'button' : undefined}
+        className="flex w-full items-center justify-between gap-2 rounded border border-transparent px-2 py-1 text-left text-sm text-slate-700 outline-none transition hover:border-slate-300 focus-visible:border-blue-300 focus-visible:ring-2 focus-visible:ring-blue-100"
       >
-        {option?.label ?? String(value)}
-      </button>
+        <span className="truncate">{selectedLabel ?? String(value)}</span>
+        {onActivate ? <ChevronIcon /> : null}
+      </div>
     );
   }
 
   return (
     <div className="flex w-full flex-col gap-1">
-      <select
-        ref={selectRef}
-        defaultValue={String(value)}
-        onFocus={() => setError(null)}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        autoFocus
-        aria-invalid={error !== null}
-        className={`w-full appearance-none rounded border bg-white px-2 py-1 text-sm outline-none focus:ring-2 ${
+      <div
+        ref={triggerRef}
+        className={`flex w-full items-center justify-between gap-2 rounded border px-2 py-1 text-left text-sm text-slate-700 ${
           error
-            ? 'border-red-500 focus:border-red-500 focus:ring-red-200'
-            : 'border-slate-300 focus:border-blue-500 focus:ring-blue-200'
+            ? 'border-red-500 ring-2 ring-red-200'
+            : 'border-blue-400 ring-2 ring-blue-100'
         }`}
       >
-        {options.map((item) => (
-          <option key={String(item.value)} value={String(item.value)}>
-            {item.label}
-          </option>
-        ))}
-      </select>
-      {error !== null && (
+        <span className="truncate">{selectedLabel ?? String(value)}</span>
+        <ChevronIcon />
+      </div>
+      {error !== null ? (
         <p className="text-xs text-red-600" role="alert">
           {error}
         </p>
-      )}
+      ) : null}
+      {menuPosition !== null
+        ? createPortal(
+            <ul
+              ref={listRef}
+              role="listbox"
+              tabIndex={-1}
+              onKeyDown={handleListKeyDown}
+              style={{
+                position: 'fixed',
+                top: menuPosition.top,
+                left: menuPosition.left,
+                width: menuPosition.width,
+              }}
+              className="z-50 max-h-60 overflow-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg outline-none"
+            >
+              {options.map((option, index) => {
+                const isSelected = option.value === value;
+                const isActive = index === activeIndex;
+                return (
+                  <li
+                    key={String(option.value)}
+                    role="option"
+                    aria-selected={isSelected}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => commit(option.value)}
+                    className={`flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm transition ${
+                      isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
+                    } ${isSelected ? 'font-semibold' : ''}`}
+                  >
+                    <span className="truncate">{option.label}</span>
+                    {isSelected ? (
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>,
+            document.body,
+          )
+        : null}
     </div>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className="h-4 w-4 shrink-0 text-slate-400"
+    >
+      <path d="M5.5 7.5 10 12l4.5-4.5H5.5Z" />
+    </svg>
   );
 }

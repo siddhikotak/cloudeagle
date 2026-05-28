@@ -76,7 +76,7 @@ const buttonClass =
   'rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white';
 
 const fieldClass =
-  'rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200';
+  'rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus-visible:border-slate-400 focus-visible:ring-2 focus-visible:ring-slate-200';
 
 const formatCurrency = (value: number): string =>
   new Intl.NumberFormat('en-US', {
@@ -501,16 +501,16 @@ function AdvancedEmployeeTableContent() {
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-[minmax(280px,420px)_1fr] md:items-end">
-          <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
-            Search all columns
+        <div className="flex flex-col gap-4">
+          <label className="flex flex-wrap items-center gap-3 text-sm font-medium text-slate-700">
+            <span className="whitespace-nowrap">Search all columns</span>
             <input
               value={filters.globalSearch}
               onChange={(event) =>
                 updateFilter('globalSearch', event.target.value)
               }
               placeholder="Name, email, department..."
-              className={fieldClass}
+              className={`${fieldClass} min-w-0 flex-1`}
             />
           </label>
 
