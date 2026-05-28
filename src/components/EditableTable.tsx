@@ -18,6 +18,7 @@ import {
 } from '@/components/table';
 import { TableStateContext } from '@/components/TableContext';
 import { EditableTableRow } from '@/components/EditableTableRow';
+import { useBeforeUnloadWarning } from '@/hooks/useBeforeUnloadWarning';
 import { useUndoRedo } from '@/hooks/useUndoRedo';
 import { useVirtualRows } from '@/hooks/useVirtualRows';
 import type { ColumnDef, ColumnDefs, RowId } from '@/types/table';
@@ -79,12 +80,15 @@ export function EditableTable<TRow extends { id: RowId }>({
   const {
     rows: draftRows,
     editedRowIds,
+    modifiedRowCount,
+    hasUnsavedChanges,
     canUndo,
     canRedo,
     commitCellEdit,
     undo,
     redo,
   } = undoRedo;
+  useBeforeUnloadWarning(hasUnsavedChanges);
   const visibleRows = useMemo(
     () => (pagination ? paginateRows(draftRows, pagination).rows : draftRows),
     [draftRows, pagination],
@@ -141,31 +145,45 @@ export function EditableTable<TRow extends { id: RowId }>({
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-wrap items-center justify-end gap-2 border-b border-slate-200 px-4 py-3">
-        <button
-          type="button"
-          onClick={handleExportCsv}
-          disabled={isLoading || visibleRows.length === 0}
-          className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
-        >
-          Export CSV
-        </button>
-        <button
-          type="button"
-          onClick={undo}
-          disabled={!canUndo}
-          className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
-        >
-          Undo
-        </button>
-        <button
-          type="button"
-          onClick={redo}
-          disabled={!canRedo}
-          className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
-        >
-          Redo
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+        <div aria-live="polite">
+          {hasUnsavedChanges ? (
+            <span className="inline-flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+              <span className="h-2 w-2 rounded-full bg-amber-500" />
+              {modifiedRowCount} modified{' '}
+              {modifiedRowCount === 1 ? 'row' : 'rows'} unsaved
+            </span>
+          ) : (
+            <span className="text-sm text-slate-500">No unsaved changes</span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={isLoading || visibleRows.length === 0}
+            className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
+          >
+            Export CSV
+          </button>
+          <button
+            type="button"
+            onClick={undo}
+            disabled={!canUndo}
+            className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
+          >
+            Undo
+          </button>
+          <button
+            type="button"
+            onClick={redo}
+            disabled={!canRedo}
+            className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
+          >
+            Redo
+          </button>
+        </div>
       </div>
       <Table
         layout={layout}

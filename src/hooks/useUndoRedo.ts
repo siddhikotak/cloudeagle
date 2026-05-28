@@ -32,6 +32,9 @@ type UseUndoRedoOptions<TRow extends { id: RowId }> = {
 export type UseUndoRedoResult<TRow extends { id: RowId }> = {
   rows: ReadonlyArray<TRow>;
   editedRowIds: ReadonlySet<RowId>;
+  modifiedRowIds: ReadonlySet<RowId>;
+  modifiedRowCount: number;
+  hasUnsavedChanges: boolean;
   canUndo: boolean;
   canRedo: boolean;
   commitCellEdit: <K extends keyof TRow>(
@@ -251,10 +254,15 @@ export function useUndoRedo<TRow extends { id: RowId }>({
     () => new Set(state.changedCellsByRow.keys()),
     [state.changedCellsByRow],
   );
+  const modifiedRowCount = editedRowIds.size;
+  const hasUnsavedChanges = modifiedRowCount > 0;
 
   return {
     rows: state.rows,
     editedRowIds,
+    modifiedRowIds: editedRowIds,
+    modifiedRowCount,
+    hasUnsavedChanges,
     canUndo: state.past.length > 0,
     canRedo: state.future.length > 0,
     commitCellEdit,
