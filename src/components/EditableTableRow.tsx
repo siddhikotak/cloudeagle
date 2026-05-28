@@ -43,8 +43,9 @@ type EditableTableRowProps<TRow extends { id: RowId }> = {
   className?: string;
   style?: CSSProperties;
   cellClassName?: string;
+  markRowEditedOnCommit?: boolean;
   onCommitCell?:
-    | ((rowId: RowId, accessor: keyof TRow, value: string | number) => void)
+    | ((rowId: RowId, accessor: keyof TRow, value: string | number) => boolean)
     | undefined;
 };
 
@@ -62,6 +63,7 @@ function EditableTableRowImpl<TRow extends { id: RowId }>({
   className = '',
   style,
   cellClassName = '',
+  markRowEditedOnCommit = true,
   onCommitCell,
 }: EditableTableRowProps<TRow>) {
   const actions = useContext(TableActionsContext);
@@ -100,8 +102,10 @@ function EditableTableRowImpl<TRow extends { id: RowId }>({
             // untouched until the parent updates upstream state in response
             // to onCommitCell. If the parent never commits, the next render
             // reverts the cell to the original automatically.
-            onCommitCell?.(row.id, c.accessor, next);
-            actions?.markRowEdited(row.id);
+            const didCommit = onCommitCell?.(row.id, c.accessor, next) ?? true;
+            if (didCommit && markRowEditedOnCommit) {
+              actions?.markRowEdited(row.id);
+            }
             actions?.clearEditingCell();
           };
           const handleCancel = () => {

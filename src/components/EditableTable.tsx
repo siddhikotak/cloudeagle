@@ -1,4 +1,10 @@
-import { useContext, useMemo, type CSSProperties, type ReactNode } from 'react';
+import {
+  useCallback,
+  useContext,
+  useMemo,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import {
   Table,
   TableBody,
@@ -12,6 +18,7 @@ import {
 } from '@/components/table';
 import { TableStateContext } from '@/components/TableContext';
 import { EditableTableRow } from '@/components/EditableTableRow';
+import { useUndoRedo } from '@/hooks/useUndoRedo';
 import { useVirtualRows } from '@/hooks/useVirtualRows';
 import type { ColumnDef, ColumnDefs, RowId } from '@/types/table';
 import { paginateRows } from '@/utils/pagination';
@@ -32,6 +39,7 @@ type EditableTableProps<TRow extends { id: RowId }> = {
   virtualRowHeight?: number;
   virtualOverscan?: number;
   virtualMaxHeight?: number | string;
+  editHistoryLimit?: number;
   emptyState?: TableStateContent;
   noResultsState?: TableStateContent;
   onCommitCell?:
@@ -49,6 +57,7 @@ export function EditableTable<TRow extends { id: RowId }>({
   virtualRowHeight = 48,
   virtualOverscan = 8,
   virtualMaxHeight = 560,
+  editHistoryLimit = 100,
   emptyState,
   noResultsState,
   onCommitCell,
@@ -62,11 +71,20 @@ export function EditableTable<TRow extends { id: RowId }>({
   // returns null and every row gets editingColumnId=null, isEdited=false.
   const tableState = useContext(TableStateContext);
   const editingCell = tableState?.editingCell ?? null;
-  const editedRowIds = tableState?.editedRowIds;
   const pagination = tableState?.pagination;
+  const undoRedo = useUndoRedo({ rows: data, historyLimit: editHistoryLimit });
+  const {
+    rows: draftRows,
+    editedRowIds,
+    canUndo,
+    canRedo,
+    commitCellEdit,
+    undo,
+    redo,
+  } = undoRedo;
   const visibleRows = useMemo(
-    () => (pagination ? paginateRows(data, pagination).rows : data),
-    [data, pagination],
+    () => (pagination ? paginateRows(draftRows, pagination).rows : draftRows),
+    [draftRows, pagination],
   );
   const virtual = useVirtualRows({
     rowCount: visibleRows.length,
@@ -96,91 +114,131 @@ export function EditableTable<TRow extends { id: RowId }>({
         ...emptyState,
       };
 
-  return (
-    <Table
-      layout={layout}
-      aria-busy={isLoading || undefined}
-      containerRef={virtual.containerRef}
-      containerStyle={
-        {
-          maxHeight: virtualMaxHeight,
-        } satisfies CSSProperties
+  const handleCommitCell = useCallback(
+    (rowId: RowId, accessor: keyof TRow, value: string | number): boolean => {
+      const didCommit = commitCellEdit(
+        rowId,
+        accessor,
+        value as TRow[keyof TRow],
+      );
+
+      if (didCommit) {
+        onCommitCell?.(rowId, accessor, value);
       }
-      onContainerScroll={virtual.onScroll}
-    >
-      <TableColgroup>
-        {columns.map((column) => {
-          const c = column as ColumnDef<TRow, keyof TRow>;
-          return (
-            <TableCol
-              key={c.id}
-              width={c.width}
-              minWidth={c.minWidth}
-              maxWidth={c.maxWidth}
-            />
-          );
-        })}
-      </TableColgroup>
-      <TableHeader>
-        <TableRow className="grid" style={{ gridTemplateColumns }}>
+
+      return didCommit;
+    },
+    [commitCellEdit, onCommitCell],
+  );
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-end gap-2 border-b border-slate-200 px-4 py-3">
+        <button
+          type="button"
+          onClick={undo}
+          disabled={!canUndo}
+          className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
+        >
+          Undo
+        </button>
+        <button
+          type="button"
+          onClick={redo}
+          disabled={!canRedo}
+          className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
+        >
+          Redo
+        </button>
+      </div>
+      <Table
+        layout={layout}
+        aria-busy={isLoading || undefined}
+        containerClassName="rounded-none border-0 shadow-none"
+        containerRef={virtual.containerRef}
+        containerStyle={
+          {
+            maxHeight: virtualMaxHeight,
+          } satisfies CSSProperties
+        }
+        onContainerScroll={virtual.onScroll}
+      >
+        <TableColgroup>
           {columns.map((column) => {
             const c = column as ColumnDef<TRow, keyof TRow>;
             return (
-              <TableCell key={c.id} as="th">
-                {c.header}
-              </TableCell>
+              <TableCol
+                key={c.id}
+                width={c.width}
+                minWidth={c.minWidth}
+                maxWidth={c.maxWidth}
+              />
             );
           })}
-        </TableRow>
-      </TableHeader>
-      <TableBody
-        className="relative block divide-y-0"
-        style={{ height: virtual.totalSize }}
-      >
-        {isLoading ? (
-          <TableLoadingState
-            columnCount={columnCount}
-            rowCount={loadingRowCount}
-          />
-        ) : null}
-        {showEmptyState ? (
-          <TableEmptyState columnCount={columnCount} {...stateContent} />
-        ) : null}
-        {!isLoading
-          ? virtual.virtualRows.map((virtualRow) => {
-              const row = visibleRows[virtualRow.index];
-              if (!row) return null;
-
-              const editingColumnId =
-                editingCell && editingCell.rowId === row.id
-                  ? editingCell.columnId
-                  : null;
-
-              // Each row is absolutely positioned inside a body whose
-              // height equals the full dataset height. translateY moves
-              // the small rendered window to its real scroll location,
-              // so 10k rows keep a 10k-row scrollbar without 10k DOM nodes.
+        </TableColgroup>
+        <TableHeader>
+          <TableRow className="grid" style={{ gridTemplateColumns }}>
+            {columns.map((column) => {
+              const c = column as ColumnDef<TRow, keyof TRow>;
               return (
-                <EditableTableRow
-                  key={row.id}
-                  row={row}
-                  columns={columns}
-                  editingColumnId={editingColumnId}
-                  isEdited={editedRowIds?.has(row.id) ?? false}
-                  className="absolute left-0 right-0 grid border-b border-slate-100"
-                  style={{
-                    gridTemplateColumns,
-                    height: virtualRow.size,
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
-                  cellClassName="flex items-center overflow-hidden"
-                  onCommitCell={onCommitCell}
-                />
+                <TableCell key={c.id} as="th">
+                  {c.header}
+                </TableCell>
               );
-            })
-          : null}
-      </TableBody>
-    </Table>
+            })}
+          </TableRow>
+        </TableHeader>
+        <TableBody
+          className="relative block divide-y-0"
+          style={{ height: virtual.totalSize }}
+        >
+          {isLoading ? (
+            <TableLoadingState
+              columnCount={columnCount}
+              rowCount={loadingRowCount}
+            />
+          ) : null}
+          {showEmptyState ? (
+            <TableEmptyState columnCount={columnCount} {...stateContent} />
+          ) : null}
+          {!isLoading
+            ? virtual.virtualRows.map((virtualRow) => {
+                const row = visibleRows[virtualRow.index];
+                if (!row) return null;
+
+                const editingColumnId =
+                  editingCell && editingCell.rowId === row.id
+                    ? editingCell.columnId
+                    : null;
+                const isEdited = editedRowIds.has(row.id);
+
+                // Each row is absolutely positioned inside a body whose
+                // height equals the full dataset height. translateY moves
+                // the small rendered window to its real scroll location,
+                // so 10k rows keep a 10k-row scrollbar without 10k DOM nodes.
+                return (
+                  <EditableTableRow
+                    key={row.id}
+                    row={row}
+                    columns={columns}
+                    editingColumnId={editingColumnId}
+                    isEdited={isEdited}
+                    className="absolute left-0 right-0 grid border-b border-slate-100"
+                    style={{
+                      gridTemplateColumns,
+                      height: virtualRow.size,
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                    cellClassName="flex items-center overflow-hidden"
+                    markRowEditedOnCommit={false}
+                    onCommitCell={handleCommitCell}
+                  />
+                );
+              })
+            : null}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
