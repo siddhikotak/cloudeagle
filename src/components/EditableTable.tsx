@@ -1,4 +1,4 @@
-import { useContext, type ReactNode } from 'react';
+import { useContext, useMemo, type ReactNode } from 'react';
 import {
   Table,
   TableBody,
@@ -13,6 +13,7 @@ import {
 import { TableStateContext } from '@/components/TableContext';
 import { EditableTableRow } from '@/components/EditableTableRow';
 import type { ColumnDef, ColumnDefs, RowId } from '@/types/table';
+import { paginateRows } from '@/utils/pagination';
 
 type TableStateContent = {
   title?: string;
@@ -55,6 +56,11 @@ export function EditableTable<TRow extends { id: RowId }>({
   const tableState = useContext(TableStateContext);
   const editingCell = tableState?.editingCell ?? null;
   const editedRowIds = tableState?.editedRowIds;
+  const pagination = tableState?.pagination;
+  const visibleRows = useMemo(
+    () => (pagination ? paginateRows(data, pagination).rows : data),
+    [data, pagination],
+  );
   const columnCount = Math.max(columns.length, 1);
   const showEmptyState = !isLoading && data.length === 0;
   const stateContent = isFiltered
@@ -107,7 +113,7 @@ export function EditableTable<TRow extends { id: RowId }>({
           <TableEmptyState columnCount={columnCount} {...stateContent} />
         ) : null}
         {!isLoading &&
-          data.map((row) => {
+          visibleRows.map((row) => {
             const editingColumnId =
               editingCell && editingCell.rowId === row.id
                 ? editingCell.columnId
