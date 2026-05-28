@@ -78,21 +78,6 @@ function EditableTableRowImpl<TRow extends { id: RowId }>({
         const value = row[c.accessor];
         const cellIsEditing = c.id === editingColumnId;
 
-        // Custom renderCell takes precedence — the consumer is responsible
-        // for click-to-edit wiring in that case.
-        if (c.renderCell) {
-          return (
-            <TableCell key={c.id} className={cellClassName}>
-              {c.renderCell({
-                value,
-                row,
-                rowId: row.id,
-                isEditing: cellIsEditing,
-              })}
-            </TableCell>
-          );
-        }
-
         if (c.editable) {
           const handleActivate = () => {
             actions?.setEditingCell({ rowId: row.id, columnId: c.id });
@@ -113,6 +98,32 @@ function EditableTableRowImpl<TRow extends { id: RowId }>({
           };
 
           const columnValidate = c.validate;
+
+          if (c.renderCell && !cellIsEditing) {
+            return (
+              <TableCell key={c.id} className={cellClassName}>
+                <span
+                  className="block cursor-pointer rounded px-1 py-0.5 hover:bg-slate-100"
+                  onClick={handleActivate}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      handleActivate();
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
+                  {c.renderCell({
+                    value,
+                    row,
+                    rowId: row.id,
+                    isEditing: cellIsEditing,
+                  })}
+                </span>
+              </TableCell>
+            );
+          }
 
           if (typeof value === 'number') {
             return (
@@ -153,6 +164,19 @@ function EditableTableRowImpl<TRow extends { id: RowId }>({
                     }
                   : {})}
               />
+            </TableCell>
+          );
+        }
+
+        if (c.renderCell) {
+          return (
+            <TableCell key={c.id} className={cellClassName}>
+              {c.renderCell({
+                value,
+                row,
+                rowId: row.id,
+                isEditing: cellIsEditing,
+              })}
             </TableCell>
           );
         }

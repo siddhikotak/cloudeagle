@@ -53,6 +53,19 @@ const createOriginalRowsById = <TRow extends { id: RowId }>(
   rows: ReadonlyArray<TRow>,
 ): ReadonlyMap<RowId, TRow> => new Map(rows.map((row) => [row.id, row]));
 
+const mergeOriginalRowsById = <TRow extends { id: RowId }>(
+  current: ReadonlyMap<RowId, TRow>,
+  rows: ReadonlyArray<TRow>,
+): ReadonlyMap<RowId, TRow> => {
+  const next = new Map(current);
+  for (const row of rows) {
+    if (!next.has(row.id)) {
+      next.set(row.id, row);
+    }
+  }
+  return next;
+};
+
 const createState = <TRow extends { id: RowId }>(
   rows: ReadonlyArray<TRow>,
 ): UndoRedoState<TRow> => ({
@@ -106,15 +119,37 @@ function reducer<TRow extends { id: RowId }>(
     case 'reset':
       return createState(action.rows);
 
-    case 'syncRows':
+    case 'syncRows': {
       if (
-        state.past.length > 0 ||
-        state.future.length > 0 ||
-        state.changedCellsByRow.size > 0
+        state.past.length === 0 &&
+        state.future.length === 0 &&
+        state.changedCellsByRow.size === 0
       ) {
-        return state;
+        return createState(action.rows);
       }
-      return createState(action.rows);
+
+      const currentRowsById = new Map(state.rows.map((row) => [row.id, row]));
+      const rows = action.rows.map((row) => {
+        const changedCells = state.changedCellsByRow.get(row.id);
+        const draftRow = currentRowsById.get(row.id);
+        if (!changedCells || !draftRow) return row;
+
+        const nextRow = { ...row };
+        for (const accessor of changedCells) {
+          nextRow[accessor] = draftRow[accessor];
+        }
+        return nextRow;
+      });
+
+      return {
+        ...state,
+        rows,
+        originalRowsById: mergeOriginalRowsById(
+          state.originalRowsById,
+          action.rows,
+        ),
+      };
+    }
 
     case 'commit': {
       const rows = updateRowValue(

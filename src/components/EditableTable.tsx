@@ -43,6 +43,7 @@ type EditableTableProps<TRow extends { id: RowId }> = {
   virtualMaxHeight?: number | string;
   editHistoryLimit?: number;
   csvFileName?: string;
+  headerFilters?: Partial<Record<string, ReactNode>>;
   emptyState?: TableStateContent;
   noResultsState?: TableStateContent;
   onCommitCell?:
@@ -62,6 +63,7 @@ export function EditableTable<TRow extends { id: RowId }>({
   virtualMaxHeight = 560,
   editHistoryLimit = 100,
   csvFileName = 'table-export.csv',
+  headerFilters,
   emptyState,
   noResultsState,
   onCommitCell,
@@ -107,6 +109,14 @@ export function EditableTable<TRow extends { id: RowId }>({
           getVirtualColumnTrack(column as ColumnDef<TRow, keyof TRow>),
         )
         .join(' '),
+    [columns],
+  );
+  const tableMinWidth = useMemo(
+    () =>
+      columns.reduce((total, column) => {
+        const c = column as ColumnDef<TRow, keyof TRow>;
+        return total + getColumnMinWidth(c);
+      }, 0),
     [columns],
   );
   const stateContent = isFiltered
@@ -196,6 +206,9 @@ export function EditableTable<TRow extends { id: RowId }>({
           } satisfies CSSProperties
         }
         onContainerScroll={virtual.onScroll}
+        style={{
+          width: `max(100%, ${tableMinWidth}px)`,
+        }}
       >
         <TableColgroup>
           {columns.map((column) => {
@@ -215,8 +228,11 @@ export function EditableTable<TRow extends { id: RowId }>({
             {columns.map((column) => {
               const c = column as ColumnDef<TRow, keyof TRow>;
               return (
-                <TableCell key={c.id} as="th">
-                  {c.header}
+                <TableCell key={c.id} as="th" className="relative">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>{c.header}</span>
+                    {headerFilters?.[c.id]}
+                  </div>
                 </TableCell>
               );
             })}
@@ -278,6 +294,20 @@ export function EditableTable<TRow extends { id: RowId }>({
 
 const toCssSize = (value: number | string): string =>
   typeof value === 'number' ? `${value}px` : value;
+
+const parsePixelSize = (value: number | string | undefined): number => {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string' && value.endsWith('px')) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+const getColumnMinWidth = <TRow, K extends keyof TRow>(
+  column: ColumnDef<TRow, K>,
+): number =>
+  parsePixelSize(column.width) || parsePixelSize(column.minWidth) || 160;
 
 const getVirtualColumnTrack = <TRow, K extends keyof TRow>(
   column: ColumnDef<TRow, K>,

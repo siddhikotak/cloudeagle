@@ -74,6 +74,7 @@ export function EditableCell(props: EditableCellProps) {
   // re-renders while typing — editing cost is O(1) regardless of table size.
   const [draft, setDraft] = useState<string>(formatDraft(props.value));
   const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Reset draft + error only on the false -> true transition. Preserves
   // any in-progress draft if the parent re-renders mid-edit.
@@ -118,17 +119,27 @@ export function EditableCell(props: EditableCellProps) {
     debouncedValidate(next);
   };
 
-  const handleSave = () => {
+  const handleSave = (): boolean => {
     debouncedValidate.cancel();
     const result = validateValue(type, validate, draft);
     if (!result.ok) {
       setError(result.message);
-      return;
+      return false;
     }
     if (props.type === 'number') {
       props.onSave(Number(draft.trim()));
     } else {
       props.onSave(draft);
+    }
+    return true;
+  };
+
+  const handleBlur = () => {
+    const didSave = handleSave();
+    if (!didSave) {
+      window.requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
     }
   };
 
@@ -178,11 +189,12 @@ export function EditableCell(props: EditableCellProps) {
   return (
     <div className="flex flex-col gap-1">
       <input
+        ref={inputRef}
         type={props.type === 'number' ? 'number' : 'text'}
         value={draft}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        onBlur={handleSave}
+        onBlur={handleBlur}
         autoFocus
         aria-invalid={error !== null}
         className={`w-full rounded border px-2 py-1 text-sm outline-none focus:ring-2 ${borderClass}`}
