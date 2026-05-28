@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useContext } from 'react';
 import {
   Table,
   TableBody,
@@ -8,6 +8,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/table';
+import { TableStateContext } from '@/components/TableContext';
+import { EditableTableRow } from '@/components/EditableTableRow';
 import type { ColumnDef, ColumnDefs, RowId } from '@/types/table';
 
 type EditableTableProps<TRow extends { id: RowId }> = {
@@ -16,17 +18,23 @@ type EditableTableProps<TRow extends { id: RowId }> = {
   layout?: 'auto' | 'fixed';
 };
 
-const formatValue = (value: unknown): ReactNode => {
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
-};
-
 export function EditableTable<TRow extends { id: RowId }>({
   data,
   columns,
   layout = 'auto',
 }: EditableTableProps<TRow>) {
+  // Subscribe to editingRowId at the parent (not inside each row) so that:
+  //   - rows themselves never read context and so don't subscribe to it,
+  //     keeping them pure functions of their props
+  //   - on every editing transition, only EditableTable re-runs; React.memo
+  //     short-circuits every row whose isEditing prop didn't change
+  //
+  // useContext is used directly (not the useTable hook) so EditableTable
+  // also works without a TableProvider ancestor — in that case the context
+  // returns null and every row gets isEditing=false.
+  const tableState = useContext(TableStateContext);
+  const editingRowId = tableState?.editingRowId ?? null;
+
   return (
     <Table layout={layout}>
       <TableColgroup>
@@ -56,21 +64,12 @@ export function EditableTable<TRow extends { id: RowId }>({
       </TableHeader>
       <TableBody>
         {data.map((row) => (
-          <TableRow key={row.id}>
-            {columns.map((column) => {
-              const c = column as ColumnDef<TRow, keyof TRow>;
-              const value = row[c.accessor];
-              const content = c.renderCell
-                ? c.renderCell({
-                    value,
-                    row,
-                    rowId: row.id,
-                    isEditing: false,
-                  })
-                : formatValue(value);
-              return <TableCell key={c.id}>{content}</TableCell>;
-            })}
-          </TableRow>
+          <EditableTableRow
+            key={row.id}
+            row={row}
+            columns={columns}
+            isEditing={editingRowId === row.id}
+          />
         ))}
       </TableBody>
     </Table>
