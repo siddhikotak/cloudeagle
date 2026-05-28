@@ -199,6 +199,14 @@ export function EditableTable<TRow extends { id: RowId }>({
       <Table
         layout={layout}
         aria-busy={isLoading || undefined}
+        // `block` overrides the default `display: table`. The thead/tbody
+        // here are `display: block` and rows are `display: grid` (for
+        // virtualization). Under `display: table`, browsers don't size
+        // block children to the table's width — tbody/tr collapse to
+        // intrinsic content (~80px from the first cell). Switching the
+        // table to `display: block` makes them fill the full width so the
+        // row's amber background extends across the entire row.
+        className="block"
         containerClassName="rounded-none border-0 shadow-none"
         containerRef={virtual.containerRef}
         containerStyle={

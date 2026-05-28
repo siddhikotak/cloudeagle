@@ -194,6 +194,11 @@ function AdvancedEmployeeTableContent() {
         sortable: true,
         filterable: true,
         width: 130,
+        // Exact equality match. The default filter is a substring search,
+        // which would let "inactive" match the filter value "active" because
+        // "active" is a substring of "inactive". Status is a fixed enum, so
+        // pick equality instead.
+        filterFn: (value, filter) => value === filter,
         renderCell: ({ value }) => (
           <span
             className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${getStatusClass(value)}`}
