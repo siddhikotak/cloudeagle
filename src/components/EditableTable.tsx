@@ -21,6 +21,7 @@ import { EditableTableRow } from '@/components/EditableTableRow';
 import { useUndoRedo } from '@/hooks/useUndoRedo';
 import { useVirtualRows } from '@/hooks/useVirtualRows';
 import type { ColumnDef, ColumnDefs, RowId } from '@/types/table';
+import { downloadCsv, rowsToCsv } from '@/utils/csv';
 import { paginateRows } from '@/utils/pagination';
 
 type TableStateContent = {
@@ -40,6 +41,7 @@ type EditableTableProps<TRow extends { id: RowId }> = {
   virtualOverscan?: number;
   virtualMaxHeight?: number | string;
   editHistoryLimit?: number;
+  csvFileName?: string;
   emptyState?: TableStateContent;
   noResultsState?: TableStateContent;
   onCommitCell?:
@@ -58,6 +60,7 @@ export function EditableTable<TRow extends { id: RowId }>({
   virtualOverscan = 8,
   virtualMaxHeight = 560,
   editHistoryLimit = 100,
+  csvFileName = 'table-export.csv',
   emptyState,
   noResultsState,
   onCommitCell,
@@ -131,9 +134,22 @@ export function EditableTable<TRow extends { id: RowId }>({
     [commitCellEdit, onCommitCell],
   );
 
+  const handleExportCsv = useCallback(() => {
+    const csv = rowsToCsv(visibleRows, columns, { includeBom: true });
+    downloadCsv(csv, csvFileName);
+  }, [columns, csvFileName, visibleRows]);
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-center justify-end gap-2 border-b border-slate-200 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-end gap-2 border-b border-slate-200 px-4 py-3">
+        <button
+          type="button"
+          onClick={handleExportCsv}
+          disabled={isLoading || visibleRows.length === 0}
+          className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
+        >
+          Export CSV
+        </button>
         <button
           type="button"
           onClick={undo}
