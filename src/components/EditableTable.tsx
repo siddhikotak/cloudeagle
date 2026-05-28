@@ -16,24 +16,27 @@ type EditableTableProps<TRow extends { id: RowId }> = {
   data: ReadonlyArray<TRow>;
   columns: ColumnDefs<TRow>;
   layout?: 'auto' | 'fixed';
+  onCommitCell?:
+    | ((rowId: RowId, accessor: keyof TRow, value: string | number) => void)
+    | undefined;
 };
 
 export function EditableTable<TRow extends { id: RowId }>({
   data,
   columns,
   layout = 'auto',
+  onCommitCell,
 }: EditableTableProps<TRow>) {
-  // Subscribe to editingRowId at the parent (not inside each row) so that:
-  //   - rows themselves never read context and so don't subscribe to it,
-  //     keeping them pure functions of their props
-  //   - on every editing transition, only EditableTable re-runs; React.memo
-  //     short-circuits every row whose isEditing prop didn't change
+  // Subscribe to editingCell + editedRowIds at the parent (not in each
+  // row). Each row receives narrow per-row props so React.memo can bail
+  // out for unaffected rows on every state change.
   //
   // useContext is used directly (not the useTable hook) so EditableTable
   // also works without a TableProvider ancestor — in that case the context
-  // returns null and every row gets isEditing=false.
+  // returns null and every row gets editingColumnId=null, isEdited=false.
   const tableState = useContext(TableStateContext);
-  const editingRowId = tableState?.editingRowId ?? null;
+  const editingCell = tableState?.editingCell ?? null;
+  const editedRowIds = tableState?.editedRowIds;
 
   return (
     <Table layout={layout}>
@@ -63,14 +66,22 @@ export function EditableTable<TRow extends { id: RowId }>({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {data.map((row) => (
-          <EditableTableRow
-            key={row.id}
-            row={row}
-            columns={columns}
-            isEditing={editingRowId === row.id}
-          />
-        ))}
+        {data.map((row) => {
+          const editingColumnId =
+            editingCell && editingCell.rowId === row.id
+              ? editingCell.columnId
+              : null;
+          return (
+            <EditableTableRow
+              key={row.id}
+              row={row}
+              columns={columns}
+              editingColumnId={editingColumnId}
+              isEdited={editedRowIds?.has(row.id) ?? false}
+              onCommitCell={onCommitCell}
+            />
+          );
+        })}
       </TableBody>
     </Table>
   );

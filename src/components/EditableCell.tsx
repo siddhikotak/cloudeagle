@@ -1,14 +1,18 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
   type KeyboardEvent,
+  type MouseEvent,
 } from 'react';
+import { debounce } from 'lodash-es';
 import type { ValidationResult } from '@/types/table';
 
 type EditableCellBaseProps = {
   isEditing: boolean;
+  onActivate?: () => void;
   onCancel: () => void;
 };
 
@@ -28,7 +32,41 @@ type NumberEditableCellProps = EditableCellBaseProps & {
 
 export type EditableCellProps = TextEditableCellProps | NumberEditableCellProps;
 
+type ValidateResult = { ok: true } | { ok: false; message: string };
+
 const formatDraft = (value: string | number): string => String(value);
+
+const VALIDATION_DEBOUNCE_MS = 150;
+
+const validateValue = (
+  type: 'text' | 'number',
+  validator:
+    | ((value: string) => ValidationResult)
+    | ((value: number) => ValidationResult)
+    | undefined,
+  next: string,
+): ValidateResult => {
+  if (type === 'number') {
+    const trimmed = next.trim();
+    if (trimmed === '' || Number.isNaN(Number(trimmed))) {
+      return { ok: false, message: 'Must be a number' };
+    }
+    if (validator) {
+      const result = (validator as (v: number) => ValidationResult)(
+        Number(trimmed),
+      );
+      return result.valid
+        ? { ok: true }
+        : { ok: false, message: result.message };
+    }
+    return { ok: true };
+  }
+  if (validator) {
+    const result = (validator as (v: string) => ValidationResult)(next);
+    return result.valid ? { ok: true } : { ok: false, message: result.message };
+  }
+  return { ok: true };
+};
 
 export function EditableCell(props: EditableCellProps) {
   // Draft is intentionally local to this cell. Keystrokes mutate only this
@@ -37,10 +75,8 @@ export function EditableCell(props: EditableCellProps) {
   const [draft, setDraft] = useState<string>(formatDraft(props.value));
   const [error, setError] = useState<string | null>(null);
 
-  // Reset the draft only when the cell ENTERS edit mode (false -> true),
-  // not on every value change. This preserves the user's in-progress
-  // draft if the parent happens to re-render with the same value, and
-  // avoids clobbering work mid-edit if upstream data updates arrive.
+  // Reset draft + error only on the false -> true transition. Preserves
+  // any in-progress draft if the parent re-renders mid-edit.
   const prevIsEditing = useRef(false);
   useEffect(() => {
     if (props.isEditing && !prevIsEditing.current) {
@@ -50,41 +86,41 @@ export function EditableCell(props: EditableCellProps) {
     prevIsEditing.current = props.isEditing;
   }, [props.isEditing, props.value]);
 
-  const runValidate = (
-    next: string,
-  ): { ok: true } | { ok: false; message: string } => {
-    if (props.type === 'number') {
-      const trimmed = next.trim();
-      if (trimmed === '' || Number.isNaN(Number(trimmed))) {
-        return { ok: false, message: 'Must be a number' };
-      }
-      if (props.validate) {
-        const result = props.validate(Number(trimmed));
-        return result.valid
-          ? { ok: true }
-          : { ok: false, message: result.message };
-      }
-      return { ok: true };
-    }
+  // Destructured outside the debounce factory so deps are scalar/function
+  // values rather than property accesses on `props` (avoids the wider deps
+  // warning while keeping the debounced fn closure stable across renders
+  // where these values are unchanged).
+  const { type, validate } = props;
 
-    if (props.validate) {
-      const result = props.validate(next);
-      return result.valid
-        ? { ok: true }
-        : { ok: false, message: result.message };
-    }
-    return { ok: true };
-  };
+  // Debounce surfacing of validation errors so fast typing doesn't flicker
+  // the error UI on every keystroke. The synchronous save path
+  // (handleSave) cancels the pending debounce and validates immediately so
+  // committed values are never stale.
+  const debouncedValidate = useMemo(
+    () =>
+      debounce((next: string) => {
+        const result = validateValue(type, validate, next);
+        setError(result.ok ? null : result.message);
+      }, VALIDATION_DEBOUNCE_MS),
+    [type, validate],
+  );
+
+  useEffect(
+    () => () => {
+      debouncedValidate.cancel();
+    },
+    [debouncedValidate],
+  );
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     const next = event.target.value;
     setDraft(next);
-    const result = runValidate(next);
-    setError(result.ok ? null : result.message);
+    debouncedValidate(next);
   };
 
   const handleSave = () => {
-    const result = runValidate(draft);
+    debouncedValidate.cancel();
+    const result = validateValue(type, validate, draft);
     if (!result.ok) {
       setError(result.message);
       return;
@@ -107,7 +143,32 @@ export function EditableCell(props: EditableCellProps) {
   };
 
   if (!props.isEditing) {
-    return <span className="block">{formatDraft(props.value)}</span>;
+    const activate = props.onActivate;
+    const handleClick = (event: MouseEvent<HTMLSpanElement>) => {
+      if (activate) {
+        event.stopPropagation();
+        activate();
+      }
+    };
+    const handleReadKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
+      if (activate && (event.key === 'Enter' || event.key === ' ')) {
+        event.preventDefault();
+        activate();
+      }
+    };
+    return (
+      <span
+        className={`block rounded px-1 py-0.5 ${
+          activate ? 'cursor-pointer hover:bg-slate-100' : ''
+        }`}
+        onClick={handleClick}
+        onKeyDown={handleReadKeyDown}
+        role={activate ? 'button' : undefined}
+        tabIndex={activate ? 0 : undefined}
+      >
+        {formatDraft(props.value)}
+      </span>
+    );
   }
 
   const borderClass = error

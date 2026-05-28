@@ -6,11 +6,16 @@ import type {
   SortState,
 } from '@/types/table';
 
+export type EditingCell = {
+  rowId: RowId;
+  columnId: string;
+};
+
 export type TableState = {
   sort: SortState;
   filters: FilterState;
   pagination: PaginationState;
-  editingRowId: RowId | null;
+  editingCell: EditingCell | null;
   editedRowIds: ReadonlySet<RowId>;
 };
 
@@ -21,8 +26,8 @@ export type TableActions = {
   clearAllFilters: () => void;
   setPageIndex: (pageIndex: number) => void;
   setPageSize: (pageSize: number) => void;
-  startEditing: (rowId: RowId) => void;
-  stopEditing: () => void;
+  setEditingCell: (cell: EditingCell) => void;
+  clearEditingCell: () => void;
   markRowEdited: (rowId: RowId) => void;
   clearEditedRows: () => void;
 };
@@ -52,7 +57,7 @@ export function useTableState(
   const [pagination, setPaginationState] = useState<PaginationState>(
     options.initialPagination ?? DEFAULT_PAGINATION,
   );
-  const [editingRowId, setEditingRowIdState] = useState<RowId | null>(null);
+  const [editingCell, setEditingCellState] = useState<EditingCell | null>(null);
   const [editedRowIds, setEditedRowIdsState] =
     useState<ReadonlySet<RowId>>(EMPTY_EDITED);
 
@@ -98,12 +103,18 @@ export function useTableState(
     );
   }, []);
 
-  const startEditing = useCallback<TableActions['startEditing']>((rowId) => {
-    setEditingRowIdState((prev) => (prev === rowId ? prev : rowId));
+  const setEditingCell = useCallback<TableActions['setEditingCell']>((cell) => {
+    setEditingCellState((prev) =>
+      prev !== null &&
+      prev.rowId === cell.rowId &&
+      prev.columnId === cell.columnId
+        ? prev
+        : cell,
+    );
   }, []);
 
-  const stopEditing = useCallback<TableActions['stopEditing']>(() => {
-    setEditingRowIdState((prev) => (prev === null ? prev : null));
+  const clearEditingCell = useCallback<TableActions['clearEditingCell']>(() => {
+    setEditingCellState((prev) => (prev === null ? prev : null));
   }, []);
 
   const markRowEdited = useCallback<TableActions['markRowEdited']>((rowId) => {
@@ -120,8 +131,8 @@ export function useTableState(
   }, []);
 
   const state = useMemo<TableState>(
-    () => ({ sort, filters, pagination, editingRowId, editedRowIds }),
-    [sort, filters, pagination, editingRowId, editedRowIds],
+    () => ({ sort, filters, pagination, editingCell, editedRowIds }),
+    [sort, filters, pagination, editingCell, editedRowIds],
   );
 
   const actions = useMemo<TableActions>(
@@ -132,8 +143,8 @@ export function useTableState(
       clearAllFilters,
       setPageIndex,
       setPageSize,
-      startEditing,
-      stopEditing,
+      setEditingCell,
+      clearEditingCell,
       markRowEdited,
       clearEditedRows,
     }),
@@ -144,8 +155,8 @@ export function useTableState(
       clearAllFilters,
       setPageIndex,
       setPageSize,
-      startEditing,
-      stopEditing,
+      setEditingCell,
+      clearEditingCell,
       markRowEdited,
       clearEditedRows,
     ],
