@@ -27,6 +27,11 @@ export type CellRenderContext<TRow, TValue> = {
   isEditing: boolean;
 };
 
+export type EditOption<TValue extends string | number = string | number> = {
+  label: string;
+  value: TValue;
+};
+
 export type ColumnDef<TRow, K extends keyof TRow = keyof TRow> = {
   id: string;
   header: string;
@@ -37,6 +42,7 @@ export type ColumnDef<TRow, K extends keyof TRow = keyof TRow> = {
   width?: number | string;
   minWidth?: number | string;
   maxWidth?: number | string;
+  editOptions?: ReadonlyArray<EditOption<Extract<TRow[K], string | number>>>;
   renderCell?: (ctx: CellRenderContext<TRow, TRow[K]>) => ReactNode;
   sortFn?: (a: TRow[K], b: TRow[K]) => number;
   filterFn?: (value: TRow[K], filter: string) => boolean;

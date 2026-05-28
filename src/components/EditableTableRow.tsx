@@ -2,6 +2,7 @@ import { memo, useContext, type CSSProperties, type ReactNode } from 'react';
 import { TableCell, TableRow } from '@/components/table';
 import { TableActionsContext } from '@/components/TableContext';
 import { EditableCell } from '@/components/EditableCell';
+import { EditableSelectCell } from '@/components/EditableSelectCell';
 import type {
   ColumnDef,
   ColumnDefs,
@@ -70,7 +71,7 @@ function EditableTableRowImpl<TRow extends { id: RowId }>({
 
   return (
     <TableRow
-      className={`${isEdited ? 'bg-amber-50! hover:bg-amber-100!' : ''} ${className}`}
+      className={`group ${isEdited ? 'bg-amber-50! hover:bg-amber-100!' : ''} ${className}`}
       style={style}
     >
       {columns.map((column) => {
@@ -121,6 +122,34 @@ function EditableTableRowImpl<TRow extends { id: RowId }>({
                     isEditing: cellIsEditing,
                   })}
                 </span>
+              </TableCell>
+            );
+          }
+
+          if (c.editOptions) {
+            type EditableOptionValue = string | number;
+            const options = c.editOptions as ReadonlyArray<{
+              label: string;
+              value: EditableOptionValue;
+            }>;
+            const selectedValue = value as EditableOptionValue;
+
+            return (
+              <TableCell key={c.id} className={cellClassName}>
+                <EditableSelectCell
+                  value={selectedValue}
+                  options={options}
+                  isEditing={cellIsEditing}
+                  onActivate={handleActivate}
+                  onSave={handleSave}
+                  onCancel={handleCancel}
+                  {...(columnValidate
+                    ? {
+                        validate: (v: EditableOptionValue): ValidationResult =>
+                          columnValidate(v as TRow[keyof TRow], row),
+                      }
+                    : {})}
+                />
               </TableCell>
             );
           }

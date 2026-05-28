@@ -1,12 +1,14 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { EditableTable } from '@/components/EditableTable';
 import { Pagination } from '@/components/Pagination';
 import { TableProvider } from '@/components/TableContext';
@@ -151,6 +153,10 @@ function AdvancedEmployeeTableContent() {
         sortable: true,
         filterable: true,
         minWidth: 170,
+        editOptions: DEPARTMENTS.map((department) => ({
+          label: department,
+          value: department,
+        })),
         validate: (value) =>
           String(value).trim().length > 0
             ? { valid: true }
@@ -599,24 +605,61 @@ function HeaderFilterMenu({
   onClear: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState({ left: 0, top: 0 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const updatePosition = useCallback(() => {
+    const trigger = buttonRef.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = 288;
+    const gutter = 12;
+    const left = Math.min(
+      Math.max(gutter, rect.right - menuWidth),
+      window.innerWidth - menuWidth - gutter,
+    );
+
+    setPosition({
+      left,
+      top: rect.bottom + 8,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePosition();
+  }, [open, updatePosition]);
 
   useEffect(() => {
     if (!open) return;
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
-      if (target instanceof Node && !menuRef.current?.contains(target)) {
+      if (
+        target instanceof Node &&
+        !menuRef.current?.contains(target) &&
+        !buttonRef.current?.contains(target)
+      ) {
         setOpen(false);
       }
     };
 
+    const handleReposition = () => {
+      updatePosition();
+    };
+
     document.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('resize', handleReposition);
+    window.addEventListener('scroll', handleReposition, true);
 
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('resize', handleReposition);
+      window.removeEventListener('scroll', handleReposition, true);
     };
-  }, [open]);
+  }, [open, updatePosition]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') {
@@ -626,8 +669,9 @@ function HeaderFilterMenu({
   };
 
   return (
-    <div ref={menuRef} className="relative" onKeyDown={handleKeyDown}>
+    <div className="relative" onKeyDown={handleKeyDown}>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         className={`flex h-7 w-7 items-center justify-center rounded-md border transition ${
@@ -640,22 +684,34 @@ function HeaderFilterMenu({
       >
         <FilterIcon />
       </button>
-      {open ? (
-        <div className="absolute right-0 top-9 z-30 w-72 rounded-lg border border-slate-200 bg-white p-3 normal-case tracking-normal shadow-xl">
-          <div className="mb-3 flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
-            <p className="text-sm font-semibold text-slate-800">{label}</p>
-            <button
-              type="button"
-              onClick={onClear}
-              disabled={!active}
-              className="rounded px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+      {open
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="fixed z-[100] w-72 overflow-auto rounded-lg border border-slate-200 bg-white p-3 normal-case tracking-normal shadow-2xl"
+              style={{
+                left: position.left,
+                top: position.top,
+                maxHeight: 'min(420px, calc(100vh - 24px))',
+              }}
+              onKeyDown={handleKeyDown}
             >
-              Clear
-            </button>
-          </div>
-          {children}
-        </div>
-      ) : null}
+              <div className="mb-3 flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                <p className="text-sm font-semibold text-slate-800">{label}</p>
+                <button
+                  type="button"
+                  onClick={onClear}
+                  disabled={!active}
+                  className="rounded px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  Clear
+                </button>
+              </div>
+              {children}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

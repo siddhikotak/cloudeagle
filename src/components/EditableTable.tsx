@@ -102,6 +102,7 @@ export function EditableTable<TRow extends { id: RowId }>({
   });
   const columnCount = Math.max(columns.length, 1);
   const showEmptyState = !isLoading && data.length === 0;
+  const hasTableStateRow = isLoading || showEmptyState;
   const gridTemplateColumns = useMemo(
     () =>
       columns
@@ -223,8 +224,11 @@ export function EditableTable<TRow extends { id: RowId }>({
             );
           })}
         </TableColgroup>
-        <TableHeader>
-          <TableRow className="grid" style={{ gridTemplateColumns }}>
+        <TableHeader className="sticky top-0 z-30 block">
+          <TableRow
+            className="grid hover:bg-slate-50"
+            style={{ gridTemplateColumns }}
+          >
             {columns.map((column) => {
               const c = column as ColumnDef<TRow, keyof TRow>;
               return (
@@ -239,8 +243,13 @@ export function EditableTable<TRow extends { id: RowId }>({
           </TableRow>
         </TableHeader>
         <TableBody
-          className="relative block divide-y-0"
-          style={{ height: virtual.totalSize }}
+          className="relative block w-full divide-y-0"
+          style={{
+            height: hasTableStateRow ? 'auto' : virtual.totalSize,
+            minHeight: hasTableStateRow
+              ? virtualRowHeight * loadingRowCount
+              : 0,
+          }}
         >
           {isLoading ? (
             <TableLoadingState
@@ -273,13 +282,13 @@ export function EditableTable<TRow extends { id: RowId }>({
                     columns={columns}
                     editingColumnId={editingColumnId}
                     isEdited={isEdited}
-                    className="absolute left-0 right-0 grid border-b border-slate-100"
+                    className="absolute left-0 right-0 grid w-full border-b border-slate-100 hover:bg-slate-50"
                     style={{
                       gridTemplateColumns,
                       height: virtualRow.size,
                       transform: `translateY(${virtualRow.start}px)`,
                     }}
-                    cellClassName="flex items-center overflow-hidden"
+                    cellClassName="flex items-center overflow-hidden group-hover:bg-slate-50"
                     markRowEditedOnCommit={false}
                     onCommitCell={handleCommitCell}
                   />

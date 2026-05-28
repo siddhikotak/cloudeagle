@@ -5,7 +5,6 @@ import {
   useState,
   type ChangeEvent,
   type KeyboardEvent,
-  type MouseEvent,
 } from 'react';
 import { debounce } from 'lodash-es';
 import type { ValidationResult } from '@/types/table';
@@ -155,30 +154,26 @@ export function EditableCell(props: EditableCellProps) {
 
   if (!props.isEditing) {
     const activate = props.onActivate;
-    const handleClick = (event: MouseEvent<HTMLSpanElement>) => {
-      if (activate) {
-        event.stopPropagation();
-        activate();
-      }
-    };
-    const handleReadKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
+    const handleReadKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
       if (activate && (event.key === 'Enter' || event.key === ' ')) {
         event.preventDefault();
         activate();
       }
     };
     return (
-      <span
-        className={`block rounded px-1 py-0.5 ${
-          activate ? 'cursor-pointer hover:bg-slate-100' : ''
-        }`}
-        onClick={handleClick}
+      <input
+        type={props.type === 'number' ? 'number' : 'text'}
+        value={formatDraft(props.value)}
+        readOnly
+        onClick={activate}
         onKeyDown={handleReadKeyDown}
-        role={activate ? 'button' : undefined}
         tabIndex={activate ? 0 : undefined}
-      >
-        {formatDraft(props.value)}
-      </span>
+        className={`w-full rounded border border-transparent bg-transparent px-2 py-1 text-sm text-slate-700 outline-none transition ${
+          activate
+            ? 'cursor-pointer hover:border-slate-200 hover:bg-white focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100'
+            : ''
+        }`}
+      />
     );
   }
 
