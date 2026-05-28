@@ -1,6 +1,6 @@
 # Editable Data Table
 
-A 10,000-row editable data table built from scratch on React 19 + TypeScript + Vite. No table library: every piece — virtualization, inline cell editing, sort, filter, pagination, undo/redo, CSV export — is custom, so the public API and performance characteristics are fully under our control.
+A 10,000-row editable data table built from scratch on React 19 + TypeScript + Vite. No table library: every piece - virtualization, inline cell editing, sort, filter, pagination, undo/redo, CSV export - is custom, so the public API and performance characteristics are fully under our control.
 
 ---
 
@@ -30,7 +30,7 @@ Requires Node 20.19+ / 22.13+ / 24+ and pnpm 9+. Open the URL Vite prints (usual
 | Singleton `editingCell: { rowId, columnId } \| null`       | Exactly one cell edits at a time. No N concurrent drafts to reconcile.                                                                           |
 | Pure sort / filter / pagination utilities                  | No React, no mutation. Trivial to test, reuse, or replace with a server-side path.                                                               |
 | Hand-rolled virtualization                                 | One `useState` for scroll position + a few `Math.floor`s. No dep, no abstraction tax.                                                            |
-| `display: block` on the `<table>` element                  | Default `display: table` won't size `display: block` thead/tbody children — they collapse to intrinsic content width (~80px).                    |
+| `display: block` on the `<table>` element                  | Default `display: table` won't size `display: block` thead/tbody children - they collapse to intrinsic content width (~80px).                    |
 | `lodash-es/debounce` for validation error UI               | Single tiny utility; full lodash isn't worth pulling in.                                                                                         |
 | Portal the edit dropdown to `document.body`                | Escapes all `overflow: hidden` and `overflow: auto` ancestors that would otherwise clip the menu inside its row.                                 |
 
@@ -74,13 +74,13 @@ Goal: typing in one cell of a 10,000-row table must not re-render the table.
 
 Tactics, in order of impact:
 
-1. **Virtualization** — only the visible window (≈20 rows) exists in the DOM. (See next section.)
-2. **`React.memo` on the row** — editing/selecting a cell re-renders at most 2 rows.
-3. **Cell-local drafts** — keystrokes never reach context, parents, or siblings.
-4. **Two contexts** — action callbacks have a stable identity; state changes flow through one component (`EditableTable`) which narrows them to per-row booleans before broadcasting.
-5. **`useMemo` on derived data** — sort and filter run only when inputs change.
-6. **Debounced validation UI** — synchronous validation on every keystroke, debounced (150 ms) display of error messages. Save explicitly cancels the pending debounce and validates synchronously, so committed values are never stale.
-7. **Pre-resolved column lookups** — `columns.find(id)` runs once before the sort/filter pass, not inside the predicate.
+1. **Virtualization** - only the visible window (≈20 rows) exists in the DOM. (See next section.)
+2. **`React.memo` on the row** - editing/selecting a cell re-renders at most 2 rows.
+3. **Cell-local drafts** - keystrokes never reach context, parents, or siblings.
+4. **Two contexts** - action callbacks have a stable identity; state changes flow through one component (`EditableTable`) which narrows them to per-row booleans before broadcasting.
+5. **`useMemo` on derived data** - sort and filter run only when inputs change.
+6. **Debounced validation UI** - synchronous validation on every keystroke, debounced (150 ms) display of error messages. Save explicitly cancels the pending debounce and validates synchronously, so committed values are never stale.
+7. **Pre-resolved column lookups** - `columns.find(id)` runs once before the sort/filter pass, not inside the predicate.
 
 ---
 
@@ -100,7 +100,7 @@ DOM layout:
 - Each rendered row: `position: absolute; left: 0; right: 0; transform: translateY(virtualRow.start)`
 - Browser scrolls a `rowCount * rowHeight`-tall container that contains ≈20 actual elements.
 
-**Layout subtlety.** The `<table>` element is `display: block`. Under the default `display: table`, browsers don't size `display: block` `<thead>` / `<tbody>` children to the table's width — they collapse to intrinsic content width (≈80 px from the first cell). Switching the table to `display: block` removes the table layout algorithm entirely; everything is laid out as plain block + CSS-grid rows whose tracks come from `grid-template-columns`. The `<colgroup>` becomes a no-op in this mode, which is the intended trade-off.
+**Layout subtlety.** The `<table>` element is `display: block`. Under the default `display: table`, browsers don't size `display: block` `<thead>` / `<tbody>` children to the table's width - they collapse to intrinsic content width (≈80 px from the first cell). Switching the table to `display: block` removes the table layout algorithm entirely; everything is laid out as plain block + CSS-grid rows whose tracks come from `grid-template-columns`. The `<colgroup>` becomes a no-op in this mode, which is the intended trade-off.
 
 **Cost.** O(visible rows), not O(rowCount). 10 k rows render with the same DOM weight as 50 rows.
 
@@ -129,7 +129,7 @@ Escape
       └─ local draft discarded; cell renders read-mode from the immutable `row` prop
 ```
 
-**Original-value preservation is implicit.** The `row` prop is never mutated. On cancel we drop the local draft, on save we replace the row upstream. Anything beyond that — undo, "discard all", restore-to-original — lives in `useUndoRedo`.
+**Original-value preservation is implicit.** The `row` prop is never mutated. On cancel we drop the local draft, on save we replace the row upstream. Anything beyond that - undo, "discard all", restore-to-original - lives in `useUndoRedo`.
 
 **"Save changes" semantics.** The toolbar's Save button calls `useUndoRedo.commitChanges()`, which:
 
@@ -145,7 +145,7 @@ In a real app, wire this to a network call: send the diff to the backend, only c
 
 Three independent layers, each cuts a different cost.
 
-**Layer 1: virtualization.** Off-screen rows aren't mounted — no reconciliation, no memo check, no DOM.
+**Layer 1: virtualization.** Off-screen rows aren't mounted - no reconciliation, no memo check, no DOM.
 
 **Layer 2: `React.memo` on `EditableTableRow`.** Props are stable by construction:
 
@@ -161,7 +161,7 @@ If any of these references becomes unstable, the optimization silently degrades 
 
 **Layer 3: cell-local drafts.** Keystrokes update one `useState` inside one `EditableCell`. The component's parent (`EditableTableRow`) doesn't re-render; siblings don't re-render; context doesn't change. The cost of typing is independent of dataset size.
 
-**Funneled state subscription.** Only `EditableTable` subscribes to `TableStateContext`. It computes per-row narrow props (`editingColumnId`, `isEdited`) and broadcasts them. Rows subscribe only to `TableActionsContext`, which never changes value during the provider's lifetime — so the act of dispatching an action doesn't re-render any row that subscribes to actions.
+**Funneled state subscription.** Only `EditableTable` subscribes to `TableStateContext`. It computes per-row narrow props (`editingColumnId`, `isEdited`) and broadcasts them. Rows subscribe only to `TableActionsContext`, which never changes value during the provider's lifetime - so the act of dispatching an action doesn't re-render any row that subscribes to actions.
 
 ---
 
