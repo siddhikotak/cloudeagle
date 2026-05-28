@@ -35,6 +35,8 @@ export type ColumnDef<TRow, K extends keyof TRow = keyof TRow> = {
   sortable?: boolean;
   filterable?: boolean;
   width?: number | string;
+  minWidth?: number | string;
+  maxWidth?: number | string;
   renderCell?: (ctx: CellRenderContext<TRow, TRow[K]>) => ReactNode;
   sortFn?: (a: TRow[K], b: TRow[K]) => number;
   filterFn?: (value: TRow[K], filter: string) => boolean;

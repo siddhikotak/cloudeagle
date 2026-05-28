@@ -3,6 +3,8 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableCol,
+  TableColgroup,
   TableHeader,
   TableRow,
 } from '@/components/table';
@@ -11,6 +13,7 @@ import type { ColumnDef, ColumnDefs, RowId } from '@/types/table';
 type EditableTableProps<TRow extends { id: RowId }> = {
   data: ReadonlyArray<TRow>;
   columns: ColumnDefs<TRow>;
+  layout?: 'auto' | 'fixed';
 };
 
 const formatValue = (value: unknown): ReactNode => {
@@ -22,17 +25,29 @@ const formatValue = (value: unknown): ReactNode => {
 export function EditableTable<TRow extends { id: RowId }>({
   data,
   columns,
+  layout = 'auto',
 }: EditableTableProps<TRow>) {
   return (
-    <Table>
+    <Table layout={layout}>
+      <TableColgroup>
+        {columns.map((column) => {
+          const c = column as ColumnDef<TRow, keyof TRow>;
+          return (
+            <TableCol
+              key={c.id}
+              width={c.width}
+              minWidth={c.minWidth}
+              maxWidth={c.maxWidth}
+            />
+          );
+        })}
+      </TableColgroup>
       <TableHeader>
         <TableRow>
           {columns.map((column) => {
             const c = column as ColumnDef<TRow, keyof TRow>;
-            const widthStyle =
-              c.width !== undefined ? { style: { width: c.width } } : {};
             return (
-              <TableCell key={c.id} as="th" {...widthStyle}>
+              <TableCell key={c.id} as="th">
                 {c.header}
               </TableCell>
             );
