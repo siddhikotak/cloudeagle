@@ -1,4 +1,4 @@
-import { memo, useContext, type ReactNode } from 'react';
+import { memo, useContext, type CSSProperties, type ReactNode } from 'react';
 import { TableCell, TableRow } from '@/components/table';
 import { TableActionsContext } from '@/components/TableContext';
 import { EditableCell } from '@/components/EditableCell';
@@ -40,6 +40,9 @@ type EditableTableRowProps<TRow extends { id: RowId }> = {
   columns: ColumnDefs<TRow>;
   editingColumnId: string | null;
   isEdited: boolean;
+  className?: string;
+  style?: CSSProperties;
+  cellClassName?: string;
   onCommitCell?:
     | ((rowId: RowId, accessor: keyof TRow, value: string | number) => void)
     | undefined;
@@ -56,12 +59,18 @@ function EditableTableRowImpl<TRow extends { id: RowId }>({
   columns,
   editingColumnId,
   isEdited,
+  className = '',
+  style,
+  cellClassName = '',
   onCommitCell,
 }: EditableTableRowProps<TRow>) {
   const actions = useContext(TableActionsContext);
 
   return (
-    <TableRow className={isEdited ? 'bg-amber-50! hover:bg-amber-100!' : ''}>
+    <TableRow
+      className={`${isEdited ? 'bg-amber-50! hover:bg-amber-100!' : ''} ${className}`}
+      style={style}
+    >
       {columns.map((column) => {
         const c = column as ColumnDef<TRow, keyof TRow>;
         const value = row[c.accessor];
@@ -71,7 +80,7 @@ function EditableTableRowImpl<TRow extends { id: RowId }>({
         // for click-to-edit wiring in that case.
         if (c.renderCell) {
           return (
-            <TableCell key={c.id}>
+            <TableCell key={c.id} className={cellClassName}>
               {c.renderCell({
                 value,
                 row,
@@ -103,7 +112,7 @@ function EditableTableRowImpl<TRow extends { id: RowId }>({
 
           if (typeof value === 'number') {
             return (
-              <TableCell key={c.id}>
+              <TableCell key={c.id} className={cellClassName}>
                 <EditableCell
                   type="number"
                   value={value}
@@ -125,7 +134,7 @@ function EditableTableRowImpl<TRow extends { id: RowId }>({
           const textValue =
             value === null || value === undefined ? '' : String(value);
           return (
-            <TableCell key={c.id}>
+            <TableCell key={c.id} className={cellClassName}>
               <EditableCell
                 type="text"
                 value={textValue}
@@ -144,7 +153,11 @@ function EditableTableRowImpl<TRow extends { id: RowId }>({
           );
         }
 
-        return <TableCell key={c.id}>{formatValue(value)}</TableCell>;
+        return (
+          <TableCell key={c.id} className={cellClassName}>
+            {formatValue(value)}
+          </TableCell>
+        );
       })}
     </TableRow>
   );

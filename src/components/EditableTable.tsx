@@ -1,4 +1,4 @@
-import { useContext, useMemo, type ReactNode } from 'react';
+import { useContext, useMemo, type CSSProperties, type ReactNode } from 'react';
 import {
   Table,
   TableBody,
@@ -12,6 +12,7 @@ import {
 } from '@/components/table';
 import { TableStateContext } from '@/components/TableContext';
 import { EditableTableRow } from '@/components/EditableTableRow';
+import { useVirtualRows } from '@/hooks/useVirtualRows';
 import type { ColumnDef, ColumnDefs, RowId } from '@/types/table';
 import { paginateRows } from '@/utils/pagination';
 
@@ -28,6 +29,9 @@ type EditableTableProps<TRow extends { id: RowId }> = {
   isLoading?: boolean;
   isFiltered?: boolean;
   loadingRowCount?: number;
+  virtualRowHeight?: number;
+  virtualOverscan?: number;
+  virtualMaxHeight?: number | string;
   emptyState?: TableStateContent;
   noResultsState?: TableStateContent;
   onCommitCell?:
@@ -42,6 +46,9 @@ export function EditableTable<TRow extends { id: RowId }>({
   isLoading = false,
   isFiltered = false,
   loadingRowCount = 8,
+  virtualRowHeight = 48,
+  virtualOverscan = 8,
+  virtualMaxHeight = 560,
   emptyState,
   noResultsState,
   onCommitCell,
@@ -61,8 +68,22 @@ export function EditableTable<TRow extends { id: RowId }>({
     () => (pagination ? paginateRows(data, pagination).rows : data),
     [data, pagination],
   );
+  const virtual = useVirtualRows({
+    rowCount: visibleRows.length,
+    rowHeight: virtualRowHeight,
+    overscan: virtualOverscan,
+  });
   const columnCount = Math.max(columns.length, 1);
   const showEmptyState = !isLoading && data.length === 0;
+  const gridTemplateColumns = useMemo(
+    () =>
+      columns
+        .map((column) =>
+          getVirtualColumnTrack(column as ColumnDef<TRow, keyof TRow>),
+        )
+        .join(' '),
+    [columns],
+  );
   const stateContent = isFiltered
     ? {
         title: 'No results',
@@ -76,7 +97,17 @@ export function EditableTable<TRow extends { id: RowId }>({
       };
 
   return (
-    <Table layout={layout} aria-busy={isLoading || undefined}>
+    <Table
+      layout={layout}
+      aria-busy={isLoading || undefined}
+      containerRef={virtual.containerRef}
+      containerStyle={
+        {
+          maxHeight: virtualMaxHeight,
+        } satisfies CSSProperties
+      }
+      onContainerScroll={virtual.onScroll}
+    >
       <TableColgroup>
         {columns.map((column) => {
           const c = column as ColumnDef<TRow, keyof TRow>;
@@ -91,7 +122,7 @@ export function EditableTable<TRow extends { id: RowId }>({
         })}
       </TableColgroup>
       <TableHeader>
-        <TableRow>
+        <TableRow className="grid" style={{ gridTemplateColumns }}>
           {columns.map((column) => {
             const c = column as ColumnDef<TRow, keyof TRow>;
             return (
@@ -102,7 +133,10 @@ export function EditableTable<TRow extends { id: RowId }>({
           })}
         </TableRow>
       </TableHeader>
-      <TableBody>
+      <TableBody
+        className="relative block divide-y-0"
+        style={{ height: virtual.totalSize }}
+      >
         {isLoading ? (
           <TableLoadingState
             columnCount={columnCount}
@@ -112,24 +146,60 @@ export function EditableTable<TRow extends { id: RowId }>({
         {showEmptyState ? (
           <TableEmptyState columnCount={columnCount} {...stateContent} />
         ) : null}
-        {!isLoading &&
-          visibleRows.map((row) => {
-            const editingColumnId =
-              editingCell && editingCell.rowId === row.id
-                ? editingCell.columnId
-                : null;
-            return (
-              <EditableTableRow
-                key={row.id}
-                row={row}
-                columns={columns}
-                editingColumnId={editingColumnId}
-                isEdited={editedRowIds?.has(row.id) ?? false}
-                onCommitCell={onCommitCell}
-              />
-            );
-          })}
+        {!isLoading
+          ? virtual.virtualRows.map((virtualRow) => {
+              const row = visibleRows[virtualRow.index];
+              if (!row) return null;
+
+              const editingColumnId =
+                editingCell && editingCell.rowId === row.id
+                  ? editingCell.columnId
+                  : null;
+
+              // Each row is absolutely positioned inside a body whose
+              // height equals the full dataset height. translateY moves
+              // the small rendered window to its real scroll location,
+              // so 10k rows keep a 10k-row scrollbar without 10k DOM nodes.
+              return (
+                <EditableTableRow
+                  key={row.id}
+                  row={row}
+                  columns={columns}
+                  editingColumnId={editingColumnId}
+                  isEdited={editedRowIds?.has(row.id) ?? false}
+                  className="absolute left-0 right-0 grid border-b border-slate-100"
+                  style={{
+                    gridTemplateColumns,
+                    height: virtualRow.size,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                  cellClassName="flex items-center overflow-hidden"
+                  onCommitCell={onCommitCell}
+                />
+              );
+            })
+          : null}
       </TableBody>
     </Table>
   );
 }
+
+const toCssSize = (value: number | string): string =>
+  typeof value === 'number' ? `${value}px` : value;
+
+const getVirtualColumnTrack = <TRow, K extends keyof TRow>(
+  column: ColumnDef<TRow, K>,
+): string => {
+  const width =
+    column.width === undefined ? undefined : toCssSize(column.width);
+  const minWidth =
+    column.minWidth === undefined ? undefined : toCssSize(column.minWidth);
+  const maxWidth =
+    column.maxWidth === undefined ? undefined : toCssSize(column.maxWidth);
+
+  if (width) return width;
+  if (minWidth || maxWidth) {
+    return `minmax(${minWidth ?? '0px'}, ${maxWidth ?? '1fr'})`;
+  }
+  return 'minmax(0, 1fr)';
+};
