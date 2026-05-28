@@ -50,10 +50,14 @@ export function EditableSelectCell<TValue extends string | number>({
   };
 
   // Measure the trigger and position the portaled list with position: fixed.
-  // Re-measure on window resize; close on any scroll so the menu never sits
-  // at a stale coordinate above its anchor. Scroll listener uses the
-  // capture phase because scroll events don't bubble — a bubble-phase
-  // listener on window would miss the table's inner scroll container.
+  // On scroll/resize, RE-measure so the menu follows its anchor (rather
+  // than closing on the first scroll event). Close only when the trigger
+  // has actually left the viewport — at that point a floating menu with
+  // no visible anchor would just be confusing.
+  //
+  // Scroll listener uses the capture phase because scroll events don't
+  // bubble: a bubble-phase listener on window would miss scrolls from the
+  // table's inner scroll container.
   useEffect(() => {
     if (!isEditing) {
       // Clear stale coords so a future re-open of this same cell doesn't
@@ -67,6 +71,15 @@ export function EditableSelectCell<TValue extends string | number>({
       const trigger = triggerRef.current;
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
+      const offscreen =
+        rect.bottom <= 0 ||
+        rect.top >= window.innerHeight ||
+        rect.right <= 0 ||
+        rect.left >= window.innerWidth;
+      if (offscreen) {
+        onCancel();
+        return;
+      }
       setMenuPosition({
         top: rect.bottom + 4,
         left: rect.left,
@@ -74,12 +87,11 @@ export function EditableSelectCell<TValue extends string | number>({
       });
     };
     measure();
-    const handleScroll = () => onCancel();
     window.addEventListener('resize', measure);
-    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('scroll', measure, true);
     return () => {
       window.removeEventListener('resize', measure);
-      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('scroll', measure, true);
     };
   }, [isEditing, onCancel]);
 
