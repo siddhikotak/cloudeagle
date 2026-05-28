@@ -5,3 +5,6 @@ export { TableRow } from './TableRow';
 export { TableCell } from './TableCell';
 export { TableColgroup } from './TableColgroup';
 export { TableCol } from './TableCol';
+export { TableEmptyState } from './TableEmptyState';
+export { TableLoadingState } from './TableLoadingState';
+export { TableSkeletonRow } from './TableSkeletonRow';
